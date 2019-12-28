@@ -20,8 +20,11 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-4.7.12-Linux-x86
 RUN conda install -y python=3.7.5 cython numpy
 
 # pytorch
-RUN apt-get install -y build-essential && apt-get clean && rm -rf /var/lib/apt/lists/*
-RUN conda install -y ninja pyyaml mkl mkl-include setuptools cmake cffi && \
+RUN apt-get update && \
+    apt-get install -y build-essential libjpeg-dev libpng-dev && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+RUN conda install -y pyyaml scipy ipython mkl mkl-include ninja typing && \
     conda install -y -c pytorch magma-cuda90
 
 WORKDIR /opt/
@@ -30,6 +33,9 @@ RUN git clone --recursive -b v1.3.1 --depth 1 https://github.com/pytorch/pytorch
 WORKDIR /opt/pytorch
 RUN git submodule sync && \
     git submodule update --init --recursive
-RUN TORCH_CUDA_ARCH_LIST="3.5 5.2 6.0 6.1 7.0+PTX" TORCH_NVCC_FLAGS="-Xfatbin -compress-all" \
+RUN MAX_JOBS=12 \
+    TORCH_CUDA_ARCH_LIST="3.7+PTX;5.0;6.0;7.0" \
+    TORCH_NVCC_FLAGS="-Xfatbin -compress-all" \
     CMAKE_PREFIX_PATH="$(dirname $(which conda))/../" \
     pip install -v .
+RUN rm -rf /opt/pytorch
