@@ -19,4 +19,7 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-4.7.12-Linux-x86
 
 RUN conda install -y python=3.7.5 cython numpy
 
+ENV CUDNN_ROOT_DIR=/usr/local/cuda \
+    MAKEFLAGS=-j8
+
 RUN pip install 'chainer<7.8.0' 'cupy<7.8.0'

@@ -1,0 +1,41 @@
+FROM ubuntu:18.04
+
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
+ENV PATH /opt/conda/bin:$PATH
+
+RUN apt-get update --fix-missing && \
+    apt-get install -y wget bzip2 ca-certificates curl git gcc g++ cmake sudo zip unzip && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# miniconda
+RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-py38_4.9.2-Linux-x86_64.sh -O ~/miniconda.sh && \
+    /bin/bash ~/miniconda.sh -b -p /opt/conda && \
+    rm ~/miniconda.sh && \
+    /opt/conda/bin/conda clean -tipsy && \
+    ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh && \
+    echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc && \
+    echo "conda activate base" >> ~/.bashrc
+
+RUN conda install -y python=3.8.5
+
+# ssh
+RUN apt-get update && \
+    curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash && \
+    apt-get install -y openssh-server openssh-client wget sudo git git-lfs && \
+    git lfs install && \
+    apt-get clean && mkdir /var/run/sshd && \
+    echo 'set -eu' > /run.sh && \
+    echo 'groupadd $GROUP_NAME -g $GROUP_ID; useradd -u $USER_ID -g $GROUP_ID -m -s /bin/bash $USER_NAME' >> /run.sh && \
+    echo 'cp ~/.profile ~/.bash* /home/$USER_NAME/' >> /run.sh && \
+    echo 'chown $USER_NAME:$GROUP_NAME /home/$USER_NAME/.*' >> /run.sh && \
+    echo 'su $USER_NAME -c "wget --quiet $GITCONFIG -O ~/.gitconfig"' >> /run.sh && \
+    echo 'su $USER_NAME -c "wget --quiet $GITIGNORE -O ~/.gitignore"' >> /run.sh && \
+    echo 'su $USER_NAME -c "mkdir -p ~/.ssh && chmod 700 ~/.ssh"' >> /run.sh && \
+    echo 'su $USER_NAME -c "wget --quiet $GITHUB_KEYS -O ~/.ssh/authorized_keys"' >> /run.sh && \
+    echo 'su $USER_NAME -c "chmod 600 ~/.ssh/authorized_keys"' >> /run.sh && \
+    echo 'echo "%$GROUP_NAME ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers' >> /run.sh  && \
+    echo '/usr/sbin/sshd -D' >> /run.sh
+
+EXPOSE 22
+CMD ["/bin/bash", "/run.sh"]
