@@ -1,4 +1,4 @@
-FROM nvidia/cuda:9.0-cudnn7-devel-ubuntu16.04
+FROM nvidia/cuda:10.1-cudnn7-devel
 
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 ENV PATH /opt/conda/bin:$PATH
@@ -17,12 +17,6 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-4.7.12-Linux-x86
     echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc && \
     echo "conda activate base" >> ~/.bashrc
 
-RUN conda install -y python=3.7.5 cython numpy
+RUN conda install -y python=3.7.5
 
-# for ChainerX
-ENV CHAINER_BUILD_CHAINERX=1 \
-    CHAINERX_BUILD_CUDA=1 \
-    CUDNN_ROOT_DIR=/usr/local/cudnn-9.0-v7.0 \
-    MAKEFLAGS=-j8
-
-RUN pip install 'chainer<7.3.0' 'cupy<7.3.0'
+RUN pip install tensorflow-gpu==2.3.1

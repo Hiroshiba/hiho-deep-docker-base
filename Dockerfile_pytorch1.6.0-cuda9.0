@@ -1,3 +1,5 @@
+# developing
+
 FROM nvidia/cuda:9.0-cudnn7-devel-ubuntu16.04
 
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
@@ -19,22 +21,30 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-4.7.12-Linux-x86
 
 RUN conda install -y python=3.7.5 cython numpy
 
+# Install GCC7
+RUN add-apt-repository ppa:ubuntu-toolchain-r/test && \
+    apt-get update && \
+    apt-get -y install g++-7 && \
+    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 70 \
+                        --slave /usr/bin/g++ g++ /usr/bin/g++-7 && \
+    update-alternatives --config gcc
+
 # pytorch
 RUN apt-get update && \
     apt-get install -y build-essential libjpeg-dev libpng-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
-RUN conda install -y pyyaml scipy ipython mkl mkl-include ninja typing && \
+RUN conda install -y pyyaml scipy ipython mkl mkl-include ninja typing cudatoolkit=9.0 && \
     conda install -y -c pytorch magma-cuda90
 
 WORKDIR /opt/
-RUN git clone --recursive -b v1.4.0 --depth 1 https://github.com/pytorch/pytorch.git
+RUN git clone --recursive -b v1.6.0 --depth 1 https://github.com/pytorch/pytorch.git
 
 WORKDIR /opt/pytorch
 RUN git submodule sync && \
     git submodule update --init --recursive
 RUN MAX_JOBS=12 \
-    TORCH_CUDA_ARCH_LIST="3.7+PTX;5.0;6.0;7.0" \
+    TORCH_CUDA_ARCH_LIST="5.2;6.1" \
     TORCH_NVCC_FLAGS="-Xfatbin -compress-all" \
     CMAKE_PREFIX_PATH="$(dirname $(which conda))/../" \
     pip install -v .

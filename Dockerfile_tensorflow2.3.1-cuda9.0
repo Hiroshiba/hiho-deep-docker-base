@@ -1,0 +1,145 @@
+######## NOT WORK ########
+
+
+# from https://github.com/tensorflow/tensorflow/blob/e41868cd1fb26babb6dffc49e32cd2b21c210c1b/tensorflow/tools/dockerfiles/dockerfiles/devel-gpu.Dockerfile
+
+ARG CUDA=9.0
+FROM nvidia/cuda:${CUDA}-base as base
+# ARCH and CUDA are specified again because the FROM directive resets ARGs
+# (but their default value is retained if set previously)
+ARG CUDA
+ARG CUDNN=7.6.5.32-1
+ARG CUDNN_MAJOR_VERSION=7
+ARG LIB_DIR_PREFIX=x86_64
+ARG LIBNVINFER=7.0.0-1
+ARG LIBNVINFER_MAJOR_VERSION=7
+
+# Needed for string substitution
+SHELL ["/bin/bash", "-c"]
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        cuda-command-line-tools-${CUDA/./-} \
+        cuda-cublas-${CUDA/./-} \
+        cuda-cublas-dev-${CUDA/./-} \
+        cuda-nvrtc-${CUDA/./-} \
+        cuda-nvrtc-dev-${CUDA/./-} \
+        cuda-cudart-dev-${CUDA/./-} \
+        cuda-cufft-dev-${CUDA/./-} \
+        cuda-curand-dev-${CUDA/./-} \
+        cuda-cusolver-dev-${CUDA/./-} \
+        cuda-cusparse-dev-${CUDA/./-} \
+        libcudnn7=${CUDNN}+cuda${CUDA} \
+        libcudnn7-dev=${CUDNN}+cuda${CUDA} \
+        libcurl3-dev \
+        libfreetype6-dev \
+        libhdf5-serial-dev \
+        libzmq3-dev \
+        pkg-config \
+        rsync \
+        software-properties-common \
+        unzip \
+        zip \
+        zlib1g-dev \
+        wget \
+        git \
+        && \
+    find /usr/local/cuda-${CUDA}/lib64/ -type f -name 'lib*_static.a' -not -name 'libcudart_static.a' -delete && \
+    rm /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/libcudnn_static_v7.a
+
+# Install GCC6
+RUN add-apt-repository ppa:ubuntu-toolchain-r/test && \
+    apt-get update && \
+    apt-get -y install g++-6 && \
+    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-6 60 \
+                        --slave /usr/bin/g++ g++ /usr/bin/g++-6 && \
+    update-alternatives --config gcc
+
+# Install TensorRT if not building for PowerPC
+RUN [[ "${ARCH}" = "ppc64le" ]] || { apt-get update && \
+        apt-get install -y --no-install-recommends libnvinfer${LIBNVINFER_MAJOR_VERSION}=${LIBNVINFER}+cuda${CUDA} \
+        libnvinfer-dev=${LIBNVINFER}+cuda${CUDA} \
+        libnvinfer-plugin-dev=${LIBNVINFER}+cuda${CUDA} \
+        libnvinfer-plugin${LIBNVINFER_MAJOR_VERSION}=${LIBNVINFER}+cuda${CUDA} \
+        && apt-get clean \
+        && rm -rf /var/lib/apt/lists/*; }
+
+# Configure the build for our CUDA configuration.
+ENV LD_LIBRARY_PATH /usr/local/cuda/extras/CUPTI/lib64:/usr/local/cuda/lib64:/usr/local/cuda/lib64/stubs:/usr/include/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+ENV TF_NEED_CUDA 1
+ENV TF_NEED_TENSORRT 1
+ENV TF_CUDA_VERSION=${CUDA}
+ENV TF_CUDNN_VERSION=${CUDNN_MAJOR_VERSION}
+# CACHE_STOP is used to rerun future commands, otherwise cloning tensorflow will be cached and will not pull the most recent version
+ARG CACHE_STOP=1
+# Check out TensorFlow source code if --build-arg CHECKOUT_TF_SRC=1
+ARG CHECKOUT_TF_SRC=0
+RUN test "${CHECKOUT_TF_SRC}" -eq 1 && git clone https://github.com/tensorflow/tensorflow.git /tensorflow_src || true
+
+# Link the libcuda stub to the location where tensorflow is searching for it and reconfigure
+# dynamic linker run-time bindings
+RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 \
+    && echo "/usr/local/cuda/lib64/stubs" > /etc/ld.so.conf.d/z-cuda-stubs.conf \
+    && ldconfig
+
+# See http://bugs.python.org/issue19846
+ENV LANG C.UTF-8
+
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip
+
+RUN python3 -m pip --no-cache-dir install --upgrade \
+    pip \
+    setuptools
+
+# Some TF tools expect a "python" binary
+RUN ln -s $(which python3) /usr/local/bin/python
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    git \
+    wget \
+    openjdk-8-jdk \
+    python3-dev \
+    virtualenv \
+    swig
+
+RUN python3 -m pip --no-cache-dir install \
+    Pillow \
+    h5py \
+    keras_preprocessing \
+    matplotlib \
+    mock \
+    'numpy<1.19.0' \
+    scipy \
+    sklearn \
+    pandas \
+    future \
+    portpicker \
+    enum34
+
+# Install bazel
+ARG BAZEL_VERSION=3.1.0
+RUN mkdir /bazel && \
+    wget -O /bazel/installer.sh "https://github.com/bazelbuild/bazel/releases/download/${BAZEL_VERSION}/bazel-${BAZEL_VERSION}-installer-linux-x86_64.sh" && \
+    wget -O /bazel/LICENSE.txt "https://raw.githubusercontent.com/bazelbuild/bazel/master/LICENSE" && \
+    chmod +x /bazel/installer.sh && \
+    /bazel/installer.sh && \
+    rm -f /bazel/installer.sh
+
+# Instlal tensorflow
+RUN git clone https://github.com/tensorflow/tensorflow.git -b v2.3.1 --depth 1 
+WORKDIR /tensorflow
+
+# sed -i 's$\#error -- unsupported GNU version\! gcc versions later than 6 are not supported\!$// #error -- unsupported GNU version! gcc versions later than 6 are not supported!$g' /usr/local/cuda-9.0/include/crt/host_config.h
+# sed -i 's/{ return __builtin_addressof(__r); }/#ifndef __CUDACC__\n{ return __builtin_addressof(__r); }\n#else\n{ return reinterpret_cast<_Tp*>(\&const_cast<char\&>(reinterpret_cast<const volatile char\&>(__r))); }\n#endif/g' /usr/include/c++/7/bits/move.h
+
+# RUN ./configure  # answer prompts or use defaults
+# RUN bazel build --config=opt --config=noaws --config=nogcp --config=cuda //tensorflow/tools/pip_package:build_pip_package --cxxopt="-D_GLIBCXX_USE_CXX11_ABI=0"
+# RUN ./bazel-bin/tensorflow/tools/pip_package/build_pip_package /mnt  # create package
+
+# apt-get update
+# apt-get install -y clang-8
+# ./configure  # answer prompts or use defaults
+# bazel build --config=opt --config=noaws --config=nogcp --config=cuda_clang //tensorflow/tools/pip_package:build_pip_package
